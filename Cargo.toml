@@ -3,11 +3,12 @@ name = "ngen_nsl"
 version = "0.1.0"
 edition = "2021"
 authors = ["Spektro Audio <contact@spektroaudio.com>"]
-homepage = "https://github.com/icaroferre/ot_utils"
-repository = "https://github.com/icaroferre/ot_utils"
+homepage = "https://github.com/spektroaudio/ngen_nsl"
+repository = "https://github.com/spektroaudio/ngen_nsl"
+readme = "README.md"
 categories = ["multimedia", "multimedia::encoding"]
 description = "Library designed for generating NSL (NGEN Scripting Language) scripts for the Spektro Audio NGEN."
-license = "GPL-3.0"
+license = "MIT OR Apache-2.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

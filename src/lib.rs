@@ -97,7 +97,7 @@ pub enum DataSource {
 }
 
 impl DataSource {
-    /// Encodes the DataSource into a Vec<u8> value
+    /// Encodes the DataSource into a `Vec<u8>` value
     pub fn code(&mut self) -> Vec<u8> {
         debug!("Converting Data Source: {:?}", self);
         self.validate();
@@ -120,7 +120,7 @@ impl DataSource {
         code
     }
 
-    /// Decodes a Vec<u8> value into a DataSource
+    /// Decodes a `Vec<u8>` value into a DataSource
     pub fn from_u8_vec(data: Vec<u8>) -> DataSource {
         debug!("Converting u8 data to DataSource: {:?}", data);
         debug!("> Data size: {:?}", data.len());
@@ -230,6 +230,8 @@ impl Int16 {
 }
 
 /// NSL Commands are the instructions that the NSL script will execute
+/// 
+/// Some commands require additional data (DataSource) to be passed as parameters (x and y).
 #[derive(Debug, Clone)]
 pub enum Commands {
     None,
@@ -341,7 +343,7 @@ impl Commands {
         }
     }
 
-    /// Encodes the command into a Vec<u8> value
+    /// Encodes the command into a `Vec<u8>` value
     pub fn code(&mut self) -> Vec<u8> {
         info!("Converting command to Vec<u8>: {:?}", self);
         let mut code: Vec<u8> = vec![self.cmd_code()];
@@ -442,7 +444,7 @@ impl Commands {
         }
     }
 
-    /// Decodes a Vec<u8> value into a Command
+    /// Decodes a `Vec<u8>` value into a Command
     pub fn from_u8_vec(data: Vec<u8>) -> Commands {
         let mut cmd = Commands::from_u8(data[0]);
         cmd = match data.len() {
@@ -486,29 +488,34 @@ impl Commands {
 }
 
 /// NSLScript is the main structure used for creating and manipulating NSL scripts.
-/// It can encode and decode NSL scripts into a Vec<u8> value.
+/// 
+/// It can encode and decode NSL scripts into a `Vec<u8>` value.
 #[derive(Debug, Clone)]
 pub struct NSLScript {
     pub commands: Vec<Commands>
 }
 
 impl NSLScript {
+    // Creates a new NSLScript with no commands
     pub fn new() -> NSLScript {
         NSLScript {
             commands: Vec::new()
         }
     }
 
+    // Add a command to the script
     pub fn add_command(&mut self, command: Commands) {
         self.commands.push(command);
     }
 
+    // Add multiple commands to the script
     pub fn add_commands(&mut self, commands: Vec<Commands>) {
         for command in commands {
             self.commands.push(command);
         }
     }
 
+    // Encode the script into a Vec<u8> value
     pub fn code(&mut self) -> Vec<u8> {
         // Add the NSL header
         let mut code: Vec<u8> = vec![0x4E, 0x53, 0x4C, 0x01];
@@ -555,15 +562,18 @@ impl NSLScript {
         }
     }
 
+    // Import a hex file and convert it to a NSLScript
     pub fn import_hex(path: &str) -> Option<NSLScript> {
         let data = std::fs::read(path).unwrap();
         NSLScript::from_u8_vec(data)
     }
 
+    // Reads a hex file and returns a Vec<u8> value
     pub fn import_hex_as_vec(path: &str) -> Vec<u8> {
         std::fs::read(path).unwrap()
     }
 
+    // Export the script as a hex file
     pub fn export_hex(&mut self, path: &str) {
         let code = self.code();
         std::fs::write(path, code).unwrap();
@@ -577,7 +587,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn main_test() {
+    fn thru_test() {
         let test_script: Vec<u8> = vec![0x4E, 0x53, 0x4C, 0x01, 0xA1, 0x06, 0x00, 0x07, 0x00, 0xB3, 0x06, 0x00, 0x00, 0x03, 0xA1, 0x06, 0x01, 0x07, 0x01, 0xB3, 0x06, 0x01, 0x00, 0x03, 0xB6, 0x06, 0x00, 0x06, 0x01, 0xA1, 0x06, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x20, 0xD2, 0x03, 0x80, 0x00, 0x00, 0xA1, 0x06, 0x01, 0x0A, 0x28, 0xA1, 0x02, 0x80, 0x08, 0x81, 0xB0, 0x02, 0x80, 0x00, 0x30, 0xA1, 0x04, 0x80, 0x00, 0x01, 0xA1, 0x05, 0x80, 0x01, 0x31, 0xD6, 0xB0, 0x06, 0x00, 0x00, 0x01, 0xC1];
         let mut script = NSLScript::from_u8_vec(test_script.clone()).unwrap();
         let code = script.code();
