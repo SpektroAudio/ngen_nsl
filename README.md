@@ -4,7 +4,7 @@
 
 ngen_nsl is Rust library for generating NSL (NGEN Scripting Language) scripts for the [Spektro Audio NGEN](https://spektroaudio.com/ngen).
 
-For more information about NGEN and NSL, please visit the [https://spektroaudio.com/ngen](https://spektroaudio.com/ngen).
+For more information about NGEN and NSL, visit [https://spektroaudio.com/ngen](https://spektroaudio.com/ngen).
 
 ## Examples 
 
