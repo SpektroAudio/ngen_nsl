@@ -1,6 +1,12 @@
 
 #![allow(dead_code)]
+use core::fmt;
+use std::default;
+
 use log::{info, debug};
+
+#[cfg(feature = "iter")]
+use strum_macros::EnumIter;
 
 /*
 
@@ -22,12 +28,18 @@ fn clip_u8(value: u8, min: u8, max: u8) -> u8 {
     }
 }
 
-
+#[cfg_attr(feature = "iter", derive(EnumIter))]
 /// DataValue is a value that can be either a direct number or a index to a value in the Memory Buffer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
     Number(u8),
     Buffer(u8)
+}
+
+impl Default for DataValue {
+    fn default() -> Self {
+        Self::Number(0)
+    }
 }
 
 impl DataValue {
@@ -66,11 +78,19 @@ impl DataValue {
             DataValue::Buffer(x) => *x = clip_u8(*x, min, max)
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            DataValue::Number(x) => format!("{}", x),
+            DataValue::Buffer(x) => format!("[MEM {}]", x)
+        }
+    }
 }
 
 
 /// DataSource is a source of data that can be used in the NSL script as a parameter for commands.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "iter", derive(EnumIter))]
 pub enum DataSource {
     /// A constant value (0 - 127)
     Constant(DataValue),
@@ -96,7 +116,45 @@ pub enum DataSource {
     RandomNote(DataValue)
 }
 
+impl Default for DataSource {
+    fn default() -> Self {
+        Self::Constant(DataValue::Number(0))
+    }
+}
+
+impl fmt::Display for DataSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            DataSource::Constant(_) => write!(f, "Constant"),
+            DataSource::Random(_) => write!(f, "Random"),
+            DataSource::StepPitch(_) => write!(f, "SEQ Pitch"),
+            DataSource::StepVelocity(_) => write!(f, "SEQ Velocity"),
+            DataSource::StepLength(_) => write!(f, "SEQ Length"),
+            DataSource::StepDensity(_) => write!(f, "SEQ Density"),
+            DataSource::MemoryBuffer(_) => write!(f, "Memory"),
+            DataSource::Params(_) => write!(f, "Params"),
+            DataSource::Scale(_) => write!(f, "Scale (Reduced)"),
+            DataSource::FullScale(_) => write!(f, "Scale"),
+            DataSource::RandomNote(_) => write!(f, "Random Note"),
+        }
+    }
+}
+
+
 impl DataSource {
+
+    pub fn is_destination(&self) -> bool {
+        match self {
+            DataSource::StepPitch(_) => true,
+            DataSource::StepVelocity(_) => true,
+            DataSource::StepLength(_) => true,
+            DataSource::StepDensity(_) => true,
+            DataSource::MemoryBuffer(_) => true,
+            _ => false,
+
+        }
+    }
+
     /// Encodes the DataSource into a `Vec<u8>` value
     pub fn code(&mut self) -> Vec<u8> {
         debug!("Converting Data Source: {:?}", self);
@@ -178,6 +236,22 @@ impl DataSource {
         }
     }
 
+    pub fn formatted_value(&self) -> String {
+        match self {
+            DataSource::Constant(x) => format!("{}", x.to_string()),
+            DataSource::Random(x) => format!("Random (0-{})", x.to_string()),
+            DataSource::StepPitch(x) => format!("Pitch SEQ Step #{}", x.to_string()),
+            DataSource::StepVelocity(x) => format!("Velocity SEQ Step #{}", x.to_string()),
+            DataSource::StepLength(x) => format!("Length SEQ Step #{}", x.to_string()),
+            DataSource::StepDensity(x) => format!("Density SEQ Step #{}", x.to_string()),
+            DataSource::MemoryBuffer(x) => format!("Memory #{}", x.to_string()),
+            DataSource::Params(x) => format!("Param #{}", x.to_string()),
+            DataSource::Scale(x) => format!("Min Scale Interval #{}", x.to_string()),
+            DataSource::FullScale(x) => format!("Scale Interval #{}", x.to_string()),
+            DataSource::RandomNote(x) => format!("Random Note (0-{})", x.to_string()),
+        }
+    }
+
     
 
 }
@@ -201,7 +275,7 @@ data_source_fn!(memory_buffer, MemoryBuffer);
 
 
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Int16 {
     value_1: u8,
     value_2: u8
@@ -233,6 +307,7 @@ impl Int16 {
 /// 
 /// Some commands require additional data (DataSource) to be passed as parameters (x and y).
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "iter", derive(EnumIter))]
 pub enum Commands {
     None,
     /// Sets x to y
@@ -283,6 +358,39 @@ pub enum Commands {
     CondEnd,
     /// Ends the script
     End,
+}
+
+
+impl std::fmt::Display for Commands {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Commands::None => write!(f, "None"),
+            Commands::Set(_, _) => write!(f, "Set"),
+            Commands::Copy(_, _) => write!(f, "Copy"),
+            Commands::Add(_, _) => write!(f, "Add"),
+            Commands::Subtract(_, _) => write!(f, "Subtract"),
+            Commands::Multiply(_, _) => write!(f, "Multiply"),
+            Commands::Divide(_, _) => write!(f, "Divide"),
+            Commands::LoopSet(_) => write!(f, "Loop Set"),
+            Commands::LoopEnd => write!(f, "Loop End"),
+            Commands::Jump(_) => write!(f, "Jump"),
+            Commands::ClearTrack => write!(f, "Clear Track"),
+            Commands::ClearMemory => write!(f, "Clear Memory"),
+            Commands::ClearAll => write!(f, "Clear All"),
+            Commands::SelectTrack => write!(f, "Select Track"),
+            Commands::QuantizePitch => write!(f, "Quantize Pitch"),
+            Commands::GenerateProgression => write!(f, "Generate Progression"),
+            Commands::GenerateEuclidean(_, _) => write!(f, "Generate Euclidean"),
+            Commands::CondE(_, _) => write!(f, "IF Equal (==)"),
+            Commands::CondNE(_, _) => write!(f, "IF Not Equal (!=)"),
+            Commands::CondGT(_, _) => write!(f, "IF Greater Than (>)"),
+            Commands::CondLT(_, _) => write!(f, "If Less Than (<)"),
+            Commands::CondGTE(_, _) => write!(f, "If Greater Equal Than (>=)"),
+            Commands::CondLTE(_, _) => write!(f, "If Less Equal Than (<=)"),
+            Commands::CondEnd => write!(f, "End IF"),
+            Commands::End => write!(f, "End"),
+        }
+    }
 }
 
 impl Commands {
@@ -481,6 +589,36 @@ impl Commands {
         };
         debug!("Converted u8 to command: {:?} > {:?}", data, cmd);
         cmd
+    }
+
+    pub fn description(&self) -> String {
+        match self {
+            Commands::None => "None".to_string(),
+            Commands::Set(x, y) => format!("Set {} to {}", x.formatted_value(), y.formatted_value()),
+            Commands::Copy(x, y) => format!("Copy {} to {}", x.formatted_value(), y.formatted_value()),
+            Commands::Add(x, y) => format!("Add {} to {}", y.formatted_value(), x.formatted_value()),
+            Commands::Subtract(_, _) => "Subtract Source from Destination".to_string(),
+            Commands::Multiply(_, _) => "Multiply Destination by Source".to_string(),
+            Commands::Divide(_, _) => "Divide Destination by Source".to_string(),
+            Commands::LoopSet(_) => "Start loop with specified repetitions".to_string(),
+            Commands::LoopEnd => "End the current loop".to_string(),
+            Commands::Jump(_) => "Jump to specified command".to_string(),
+            Commands::ClearTrack => "Clear the current track".to_string(),
+            Commands::ClearMemory => "Clear the memory".to_string(),
+            Commands::ClearAll => "Clear all tracks and memory".to_string(),
+            Commands::SelectTrack => "Select a specific track".to_string(),
+            Commands::QuantizePitch => "Quantize the pitch sequence".to_string(),
+            Commands::GenerateProgression => "Generate a chord progression".to_string(),
+            Commands::GenerateEuclidean(_, _) => "Generate a velocity sequence using Euclidean algorithm".to_string(),
+            Commands::CondE(_, _) => "Conditional execution if values are equal".to_string(),
+            Commands::CondNE(_, _) => "Conditional execution if values are not equal".to_string(),
+            Commands::CondGT(_, _) => "Conditional execution if value is greater than".to_string(),
+            Commands::CondLT(_, _) => "Conditional execution if value is less than".to_string(),
+            Commands::CondGTE(_, _) => "Conditional execution if value is greater than or equal to".to_string(),
+            Commands::CondLTE(_, _) => "Conditional execution if value is less than or equal to".to_string(),
+            Commands::CondEnd => "End the conditional statement".to_string(),
+            Commands::End => "End of the script".to_string()
+        }.to_string()
     }
     
 
