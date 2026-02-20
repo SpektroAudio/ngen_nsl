@@ -1,9 +1,8 @@
-
 #![allow(dead_code)]
 use core::fmt;
 use std::default;
 
-use log::{info, debug};
+use log::{debug, info};
 
 #[cfg(feature = "iter")]
 use strum_macros::EnumIter;
@@ -33,7 +32,7 @@ fn clip_u8(value: u8, min: u8, max: u8) -> u8 {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataValue {
     Number(u8),
-    Buffer(u8)
+    Buffer(u8),
 }
 
 impl Default for DataValue {
@@ -43,14 +42,13 @@ impl Default for DataValue {
 }
 
 impl DataValue {
-
     /// Decodes a u8 value into a DataValue
     pub fn from_u8(value: u8) -> DataValue {
-        let dv =  if value > 127 {
-                    DataValue::Buffer(value - 0x80)
-                } else {
-                    DataValue::Number(value)
-                };
+        let dv = if value > 127 {
+            DataValue::Buffer(value - 0x80)
+        } else {
+            DataValue::Number(value)
+        };
         // info!("{} > {:?}", value, dv);
         dv
     }
@@ -58,16 +56,14 @@ impl DataValue {
     /// Encodes the DataValue into a u8 value
     pub fn code(&self) -> u8 {
         match self {
-            DataValue::Number(x) =>  {
+            DataValue::Number(x) => {
                 let mut value = *x;
                 if value > 127 {
                     value = 127;
                 }
                 0x00 + value
-            },
-            DataValue::Buffer(x) => {
-                x + 0x80
             }
+            DataValue::Buffer(x) => x + 0x80,
         }
     }
 
@@ -75,18 +71,17 @@ impl DataValue {
     pub fn clip(&mut self, min: u8, max: u8) {
         match self {
             DataValue::Number(x) => *x = clip_u8(*x, min, max),
-            DataValue::Buffer(x) => *x = clip_u8(*x, min, max)
+            DataValue::Buffer(x) => *x = clip_u8(*x, min, max),
         }
     }
 
     pub fn to_string(&self) -> String {
         match self {
             DataValue::Number(x) => format!("{}", x),
-            DataValue::Buffer(x) => format!("[MEM {}]", x)
+            DataValue::Buffer(x) => format!("[MEM {}]", x),
         }
     }
 }
-
 
 /// DataSource is a source of data that can be used in the NSL script as a parameter for commands.
 #[derive(Debug, Clone, PartialEq)]
@@ -113,7 +108,7 @@ pub enum DataSource {
     /// A value from the Full Scale (0 - 127)
     FullScale(DataValue),
     /// A random note value (0 - 100)
-    RandomNote(DataValue)
+    RandomNote(DataValue),
 }
 
 impl Default for DataSource {
@@ -140,9 +135,7 @@ impl fmt::Display for DataSource {
     }
 }
 
-
 impl DataSource {
-
     pub fn is_destination(&self) -> bool {
         match self {
             DataSource::StepPitch(_) => true,
@@ -151,7 +144,6 @@ impl DataSource {
             DataSource::StepDensity(_) => true,
             DataSource::MemoryBuffer(_) => true,
             _ => false,
-
         }
     }
 
@@ -159,8 +151,7 @@ impl DataSource {
     pub fn code(&mut self) -> Vec<u8> {
         debug!("Converting Data Source: {:?}", self);
         self.validate();
-        let code: Vec<u8> = 
-        match self {
+        let code: Vec<u8> = match self {
             DataSource::Constant(x) => vec![0x00, x.code()],
             DataSource::Random(x) => vec![0x01, x.code()],
             DataSource::StepPitch(x) => vec![0x02, x.code()],
@@ -171,10 +162,12 @@ impl DataSource {
             DataSource::Params(x) => vec![0x07, x.code()],
             DataSource::Scale(x) => vec![0x08, x.code()],
             DataSource::FullScale(x) => vec![0x09, x.code()],
-            DataSource::RandomNote(x) => vec![0x0A, x.code()]
-
+            DataSource::RandomNote(x) => vec![0x0A, x.code()],
         };
-        debug!("> Converted Data Source to Vec<u8>: {:?} > {:?}", self, code);
+        debug!(
+            "> Converted Data Source to Vec<u8>: {:?} > {:?}",
+            self, code
+        );
         code
     }
 
@@ -195,7 +188,7 @@ impl DataSource {
             0x08 => DataSource::Scale(value),
             0x09 => DataSource::FullScale(value),
             0x0A => DataSource::RandomNote(value),
-            _ => DataSource::Constant(DataValue::from_u8(0))
+            _ => DataSource::Constant(DataValue::from_u8(0)),
         };
         debug!("> Converted Vec<u8> to DataSource: {:?} > {:?}", data, ds);
         ds
@@ -214,7 +207,7 @@ impl DataSource {
             DataSource::Params(_) => 3,
             DataSource::Scale(_) => 127,
             DataSource::FullScale(_) => 127,
-            DataSource::RandomNote(_) => 100
+            DataSource::RandomNote(_) => 100,
         }
     }
 
@@ -251,9 +244,6 @@ impl DataSource {
             DataSource::RandomNote(x) => format!("Random Note (0-{})", x.to_string()),
         }
     }
-
-    
-
 }
 
 macro_rules! data_source_fn {
@@ -273,20 +263,15 @@ data_source_fn!(step_length, StepLength);
 data_source_fn!(step_density, StepDensity);
 data_source_fn!(memory_buffer, MemoryBuffer);
 
-
-
 #[derive(Debug, Clone, Default)]
 pub struct Int16 {
     value_1: u8,
-    value_2: u8
+    value_2: u8,
 }
 
 impl Int16 {
     pub fn new(value_1: u8, value_2: u8) -> Int16 {
-        Int16 {
-            value_1,
-            value_2
-        }
+        Int16 { value_1, value_2 }
     }
 
     pub fn get_value(&self) -> u16 {
@@ -300,11 +285,10 @@ impl Int16 {
     pub fn from_u8_vec(data: Vec<u8>) -> Int16 {
         Int16::new(data[0], data[1])
     }
-    
 }
 
 /// NSL Commands are the instructions that the NSL script will execute
-/// 
+///
 /// Some commands require additional data (DataSource) to be passed as parameters (x and y).
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "iter", derive(EnumIter))]
@@ -338,7 +322,7 @@ pub enum Commands {
     SelectTrack,
     /// Quantizes all steps of the active track's pitch sequence
     QuantizePitch,
-    /// Generates a chord progression 
+    /// Generates a chord progression
     GenerateProgression,
     /// Generates a velocity sequence to the active track usign the Euclidean algorithm
     GenerateEuclidean(DataSource, DataSource),
@@ -359,7 +343,6 @@ pub enum Commands {
     /// Ends the script
     End,
 }
-
 
 impl std::fmt::Display for Commands {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -417,7 +400,7 @@ impl Commands {
             Commands::CondLTE(_, _) => 5,
             Commands::LoopSet(_) => 3,
             Commands::Jump(_) => 3,
-            _ => 1
+            _ => 1,
         }
     }
 
@@ -447,7 +430,7 @@ impl Commands {
             Commands::LoopEnd => 0xC1,
             Commands::Jump(_) => 0xC2,
             Commands::End => 0xFF,
-            _ => 0x00
+            _ => 0x00,
         }
     }
 
@@ -459,61 +442,61 @@ impl Commands {
             Commands::Set(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::Copy(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::Add(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::Subtract(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::Multiply(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::Divide(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::LoopSet(x) => {
                 code.extend(x.code());
-            },
+            }
             Commands::Jump(x) => {
                 code.extend(x.code());
-            },
+            }
             Commands::GenerateEuclidean(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondE(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondNE(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondGT(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondLT(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondGTE(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             Commands::CondLTE(x, y) => {
                 code.extend(x.code());
                 code.extend(y.code());
-            },
+            }
             _ => {
                 debug!("No additional data");
             }
@@ -525,30 +508,69 @@ impl Commands {
     /// Decodes a u8 value into a Command
     pub fn from_u8(data: u8) -> Commands {
         match data {
-            0xA1 => Commands::Set(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xA2 => Commands::Copy(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
+            0xA1 => Commands::Set(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xA2 => Commands::Copy(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
             0xA3 => Commands::ClearTrack,
             0xA4 => Commands::ClearMemory,
             0xA5 => Commands::ClearAll,
-            0xB0 => Commands::Add(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xB1 => Commands::Subtract(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xB2 => Commands::Multiply(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xB3 => Commands::Divide(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
+            0xB0 => Commands::Add(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xB1 => Commands::Subtract(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xB2 => Commands::Multiply(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xB3 => Commands::Divide(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
             0xB4 => Commands::QuantizePitch,
             0xB5 => Commands::GenerateProgression,
-            0xB6 => Commands::GenerateEuclidean(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
+            0xB6 => Commands::GenerateEuclidean(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
             0xC0 => Commands::LoopSet(DataSource::Constant(DataValue::from_u8(0))),
             0xC1 => Commands::LoopEnd,
             0xC2 => Commands::Jump(Int16::new(0, 0)),
-            0xD0 => Commands::CondE(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xD1 => Commands::CondNE(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xD2 => Commands::CondGT(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xD3 => Commands::CondLT(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xD4 => Commands::CondGTE(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
-            0xD5 => Commands::CondLTE(DataSource::Constant(DataValue::from_u8(0)), DataSource::Constant(DataValue::from_u8(0))),
+            0xD0 => Commands::CondE(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xD1 => Commands::CondNE(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xD2 => Commands::CondGT(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xD3 => Commands::CondLT(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xD4 => Commands::CondGTE(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
+            0xD5 => Commands::CondLTE(
+                DataSource::Constant(DataValue::from_u8(0)),
+                DataSource::Constant(DataValue::from_u8(0)),
+            ),
             0xD6 => Commands::CondEnd,
             0xFF => Commands::End,
-            _ => Commands::None
+            _ => Commands::None,
         }
     }
 
@@ -573,19 +595,17 @@ impl Commands {
                     Commands::CondGTE(_, _) => Commands::CondGTE(x, y),
                     Commands::CondLTE(_, _) => Commands::CondLTE(x, y),
                     Commands::GenerateEuclidean(_, _) => Commands::GenerateEuclidean(x, y),
-                    _ => Commands::None
+                    _ => Commands::None,
                 }
-            },
+            }
             3 => {
                 let x = DataSource::from_u8_vec(data[1..3].to_vec());
                 match cmd {
                     Commands::LoopSet(_) => Commands::LoopSet(x),
-                    _ => Commands::None
+                    _ => Commands::None,
                 }
-            },
-            _ => {
-                cmd
             }
+            _ => cmd,
         };
         debug!("Converted u8 to command: {:?} > {:?}", data, cmd);
         cmd
@@ -594,12 +614,28 @@ impl Commands {
     pub fn description(&self) -> String {
         match self {
             Commands::None => "None".to_string(),
-            Commands::Set(x, y) => format!("Set {} to {}", x.formatted_value(), y.formatted_value()),
-            Commands::Copy(x, y) => format!("Copy {} to {}", x.formatted_value(), y.formatted_value()),
-            Commands::Add(x, y) => format!("Add {} to {}", y.formatted_value(), x.formatted_value()),
-            Commands::Subtract(x,y) => format!("Subtract {} from {}", y.formatted_value(), x.formatted_value()),
-            Commands::Multiply(x,y) => format!("Multiply {} by {}", x.formatted_value(), y.formatted_value()),
-            Commands::Divide(x,y) => format!("Divide {} by {}", x.formatted_value(), y.formatted_value()),
+            Commands::Set(x, y) => {
+                format!("Set {} to {}", x.formatted_value(), y.formatted_value())
+            }
+            Commands::Copy(x, y) => {
+                format!("Copy {} to {}", x.formatted_value(), y.formatted_value())
+            }
+            Commands::Add(x, y) => {
+                format!("Add {} to {}", y.formatted_value(), x.formatted_value())
+            }
+            Commands::Subtract(x, y) => format!(
+                "Subtract {} from {}",
+                y.formatted_value(),
+                x.formatted_value()
+            ),
+            Commands::Multiply(x, y) => format!(
+                "Multiply {} by {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::Divide(x, y) => {
+                format!("Divide {} by {}", x.formatted_value(), y.formatted_value())
+            }
             Commands::LoopSet(x) => format!("Loop ({} times)", x.formatted_value()),
             Commands::LoopEnd => "End the current loop".to_string(),
             Commands::Jump(_) => "Jump to specified command".to_string(),
@@ -609,36 +645,89 @@ impl Commands {
             Commands::SelectTrack => "Select a specific track".to_string(),
             Commands::QuantizePitch => "Quantize the pitch sequence".to_string(),
             Commands::GenerateProgression => "Generate a chord progression".to_string(),
-            Commands::GenerateEuclidean(_, _) => "Generate a velocity sequence using Euclidean algorithm".to_string(),
-            Commands::CondE(x, y) => format!("Conditional: {} == {}", x, y),
-            Commands::CondNE(x,y) => format!("Conditional: {} != {}", x, y),
-            Commands::CondGT(x,y) => format!("Conditional: {} > {}", x, y),
-            Commands::CondLT(x,y) => format!("Conditional: {} < {}", x, y),
-            Commands::CondGTE(x,y) => format!("Conditional: {} >= {}", x, y),
-            Commands::CondLTE(x,y) => format!("Conditional: {} <= {}", x, y),
+            Commands::GenerateEuclidean(_, _) => {
+                "Generate a velocity sequence using Euclidean algorithm".to_string()
+            }
+            Commands::CondE(x, y) => format!(
+                "Conditional: {} == {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::CondNE(x, y) => format!(
+                "Conditional: {} != {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::CondGT(x, y) => format!(
+                "Conditional: {} > {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::CondLT(x, y) => format!(
+                "Conditional: {} < {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::CondGTE(x, y) => format!(
+                "Conditional: {} >= {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
+            Commands::CondLTE(x, y) => format!(
+                "Conditional: {} <= {}",
+                x.formatted_value(),
+                y.formatted_value()
+            ),
             Commands::CondEnd => "End the conditional statement".to_string(),
-            Commands::End => "End of the script".to_string()
-        }.to_string()
+            Commands::End => "End of the script".to_string(),
+        }
+        .to_string()
     }
-    
-
-
 }
 
 /// NSLScript is the main structure used for creating and manipulating NSL scripts.
-/// 
+///
 /// It can encode and decode NSL scripts into a `Vec<u8>` value.
 #[derive(Debug, Clone)]
 pub struct NSLScript {
-    pub commands: Vec<Commands>
+    pub commands: Vec<Commands>,
 }
 
 impl NSLScript {
     // Creates a new NSLScript with no commands
     pub fn new() -> NSLScript {
         NSLScript {
-            commands: Vec::new()
+            commands: Vec::new(),
         }
+    }
+
+    /// Validates the command list by checking for conditional and loop levels
+    pub fn validate(&self) -> bool {
+        let mut if_level = 0;
+        let mut loop_level = 0;
+        for cmd in self.commands.iter() {
+            match cmd {
+                Commands::CondE(_, _)
+                | Commands::CondNE(_, _)
+                | Commands::CondGT(_, _)
+                | Commands::CondLT(_, _)
+                | Commands::CondGTE(_, _)
+                | Commands::CondLTE(_, _) => {
+                    if_level += 1;
+                }
+                Commands::LoopSet(_) => {
+                    loop_level += 1;
+                }
+                Commands::LoopEnd => {
+                    loop_level -= 1;
+                }
+                Commands::CondEnd => {
+                    if_level -= 1;
+                }
+                _ => {}
+            }
+        }
+        (if_level == 0) && (loop_level == 0)
     }
 
     // Add a command to the script
@@ -682,16 +771,17 @@ impl NSLScript {
             debug!("Index: {}", i);
             let mut cmd = Commands::from_u8(data[i]);
             let len = cmd.len();
-            debug!("Matching command {:#04x}: {:?} (Len: {})", data[i], cmd, len);
-            let cmd_data = data[i..i+len].to_vec();
+            debug!(
+                "Matching command {:#04x}: {:?} (Len: {})",
+                data[i], cmd, len
+            );
+            let cmd_data = data[i..i + len].to_vec();
             cmd = Commands::from_u8_vec(cmd_data);
             info!("Converted step {}: {:?}", i, cmd);
             cmds.push(cmd);
             i += len;
         }
-        Some(NSLScript {
-            commands: cmds
-        })
+        Some(NSLScript { commands: cmds })
     }
 
     pub fn get_info(&self) {
@@ -716,7 +806,6 @@ impl NSLScript {
         let code = self.code();
         std::fs::write(path, code).unwrap();
     }
-
 }
 
 // Implement a simple test
@@ -726,12 +815,24 @@ mod tests {
 
     #[test]
     fn thru_test() {
-        let test_script: Vec<u8> = vec![0x4E, 0x53, 0x4C, 0x01, 0xA1, 0x06, 0x00, 0x07, 0x00, 0xB3, 0x06, 0x00, 0x00, 0x03, 0xA1, 0x06, 0x01, 0x07, 0x01, 0xB3, 0x06, 0x01, 0x00, 0x03, 0xB6, 0x06, 0x00, 0x06, 0x01, 0xA1, 0x06, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x20, 0xD2, 0x03, 0x80, 0x00, 0x00, 0xA1, 0x06, 0x01, 0x0A, 0x28, 0xA1, 0x02, 0x80, 0x08, 0x81, 0xB0, 0x02, 0x80, 0x00, 0x30, 0xA1, 0x04, 0x80, 0x00, 0x01, 0xA1, 0x05, 0x80, 0x01, 0x31, 0xD6, 0xB0, 0x06, 0x00, 0x00, 0x01, 0xC1];
+        let test_script: Vec<u8> = vec![
+            0x4E, 0x53, 0x4C, 0x01, 0xA1, 0x06, 0x00, 0x07, 0x00, 0xB3, 0x06, 0x00, 0x00, 0x03,
+            0xA1, 0x06, 0x01, 0x07, 0x01, 0xB3, 0x06, 0x01, 0x00, 0x03, 0xB6, 0x06, 0x00, 0x06,
+            0x01, 0xA1, 0x06, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x20, 0xD2, 0x03, 0x80, 0x00, 0x00,
+            0xA1, 0x06, 0x01, 0x0A, 0x28, 0xA1, 0x02, 0x80, 0x08, 0x81, 0xB0, 0x02, 0x80, 0x00,
+            0x30, 0xA1, 0x04, 0x80, 0x00, 0x01, 0xA1, 0x05, 0x80, 0x01, 0x31, 0xD6, 0xB0, 0x06,
+            0x00, 0x00, 0x01, 0xC1,
+        ];
         let mut script = NSLScript::from_u8_vec(test_script.clone()).unwrap();
         let code = script.code();
 
-        assert_eq!(test_script, code, "Verifying code... File: {} / Generated {}", test_script.len(), code.len());
-
+        assert_eq!(
+            test_script,
+            code,
+            "Verifying code... File: {} / Generated {}",
+            test_script.len(),
+            code.len()
+        );
     }
-
 }
+
