@@ -172,6 +172,10 @@ impl DataSource {
 
     /// Decodes a `Vec<u8>` value into a DataSource
     pub fn from_u8_vec(data: Vec<u8>) -> DataSource {
+        // Return 0 if data is too short
+        if data.len() < 2 {
+            return DataSource::Constant(DataValue::from_u8(0));
+        }
         debug!("Converting u8 data to DataSource: {:?}", data);
         debug!("> Data size: {:?}", data.len());
         let value = DataValue::from_u8(data[1]);
@@ -285,8 +289,11 @@ impl Int16 {
         vec![self.value_1, self.value_2]
     }
 
-    pub fn from_u8_vec(data: Vec<u8>) -> Int16 {
-        Int16::new(data[0], data[1])
+    pub fn from_u8_vec(data: Vec<u8>) -> Option<Int16> {
+        if data.len() < 2 {
+            return None;
+        }
+        Some(Int16::new(data[0], data[1]))
     }
 }
 
@@ -579,6 +586,11 @@ impl Commands {
 
     /// Decodes a `Vec<u8>` value into a Command
     pub fn from_u8_vec(data: Vec<u8>) -> Commands {
+        // Return none if data is empty
+        if data.is_empty() {
+            return Commands::None;
+        }
+
         let mut cmd = Commands::from_u8(data[0]);
         cmd = match data.len() {
             5 => {
@@ -605,7 +617,13 @@ impl Commands {
                 let x = DataSource::from_u8_vec(data[1..3].to_vec());
                 match cmd {
                     Commands::LoopSet(_) => Commands::LoopSet(x),
-                    Commands::Jump(_) => Commands::Jump(Int16::from_u8_vec(data[1..3].to_vec())),
+                    Commands::Jump(_) => {
+                        if let Some(value) = Int16::from_u8_vec(data[1..3].to_vec()) {
+                            Commands::Jump(value)
+                        } else {
+                            Commands::None
+                        }
+                    }
                     _ => Commands::None,
                 }
             }
@@ -767,18 +785,22 @@ impl NSLScript {
     pub fn from_u8_vec(data: Vec<u8>) -> Option<NSLScript> {
         info!("Converting u8 data to NSLScript");
         info!("Data size: {:?}", data.len());
+        let data_len = data.len();
         let mut cmds: Vec<Commands> = Vec::new();
         let mut i = 0;
         // Match first 3 characters to "NSL"
-        if data[0] != 0x4E || data[1] != 0x53 || data[2] != 0x4C {
+        if data_len < 4 || data[0] != 0x4E || data[1] != 0x53 || data[2] != 0x4C {
             return None;
         }
         i += 4;
-        while i < data.len() {
+        while i < data_len {
             debug!("----------------");
             debug!("Index: {}", i);
             let mut cmd = Commands::from_u8(data[i]);
             let len = cmd.len();
+            if i + len > data_len {
+                return None;
+            }
             debug!(
                 "Matching command {:#04x}: {:?} (Len: {})",
                 data[i], cmd, len
@@ -800,19 +822,22 @@ impl NSLScript {
 
     // Import a hex file and convert it to a NSLScript
     pub fn import_hex(path: &str) -> Option<NSLScript> {
-        let data = std::fs::read(path).unwrap();
-        NSLScript::from_u8_vec(data)
+        if let Ok(data) = std::fs::read(path) {
+            NSLScript::from_u8_vec(data)
+        } else {
+            None
+        }
     }
 
     // Reads a hex file and returns a Vec<u8> value
-    pub fn import_hex_as_vec(path: &str) -> Vec<u8> {
-        std::fs::read(path).unwrap()
+    pub fn import_hex_as_vec(path: &str) -> Result<Vec<u8>, String> {
+        std::fs::read(path).map_err(|f| f.to_string())
     }
 
     // Export the script as a hex file
-    pub fn export_hex(&mut self, path: &str) {
+    pub fn export_hex(&mut self, path: &str) -> Result<(), String> {
         let code = self.code();
-        std::fs::write(path, code).unwrap();
+        std::fs::write(path, code).map_err(|f| f.to_string())
     }
 }
 
