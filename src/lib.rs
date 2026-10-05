@@ -62,7 +62,7 @@ impl DataValue {
                 }
                 0x00 + value
             }
-            DataValue::Buffer(x) => x + 0x80,
+            DataValue::Buffer(x) => clip_u8(*x, 0, 31) + 0x80,
         }
     }
 
@@ -807,8 +807,10 @@ impl NSLScript {
             );
             let cmd_data = data[i..i + len].to_vec();
             cmd = Commands::from_u8_vec(cmd_data);
-            info!("Converted step {}: {:?}", i, cmd);
-            cmds.push(cmd);
+            if cmd != Commands::None {
+                info!("Converted step {}: {:?}", i, cmd);
+                cmds.push(cmd);
+            }
             i += len;
         }
         Some(NSLScript { commands: cmds })
