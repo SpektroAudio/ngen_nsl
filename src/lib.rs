@@ -49,7 +49,6 @@ impl DataValue {
         } else {
             DataValue::Number(value)
         };
-        // info!("{} > {:?}", value, dv);
         dv
     }
 
@@ -263,7 +262,7 @@ data_source_fn!(step_length, StepLength);
 data_source_fn!(step_density, StepDensity);
 data_source_fn!(memory_buffer, MemoryBuffer);
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct Int16 {
     value_1: u8,
     value_2: u8,
@@ -290,7 +289,7 @@ impl Int16 {
 /// NSL Commands are the instructions that the NSL script will execute
 ///
 /// Some commands require additional data (DataSource) to be passed as parameters (x and y).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "iter", derive(EnumIter))]
 pub enum Commands {
     None,
@@ -705,6 +704,10 @@ impl NSLScript {
     pub fn validate(&self) -> bool {
         let mut if_level = 0;
         let mut loop_level = 0;
+        let finish_end = match self.commands.last() {
+            Some(f) => *f == Commands::End,
+            None => false,
+        };
         for cmd in self.commands.iter() {
             match cmd {
                 Commands::CondE(_, _)
@@ -727,7 +730,7 @@ impl NSLScript {
                 _ => {}
             }
         }
-        (if_level == 0) && (loop_level == 0)
+        (if_level == 0) && (loop_level == 0) && finish_end
     }
 
     // Add a command to the script
@@ -835,4 +838,3 @@ mod tests {
         );
     }
 }
-
