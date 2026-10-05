@@ -273,6 +273,10 @@ impl Int16 {
         Int16 { value_1, value_2 }
     }
 
+    pub fn from_u16(value: u16) -> Int16 {
+        Int16::new((value >> 8) as u8, (value & 0xFF) as u8)
+    }
+
     pub fn get_value(&self) -> u16 {
         (self.value_1 as u16) << 8 | self.value_2 as u16
     }
@@ -355,7 +359,7 @@ impl std::fmt::Display for Commands {
             Commands::Divide(_, _) => write!(f, "Divide"),
             Commands::LoopSet(_) => write!(f, "Loop Set"),
             Commands::LoopEnd => write!(f, "Loop End"),
-            Commands::Jump(_) => write!(f, "Jump"),
+            Commands::Jump(x) => write!(f, "Jump to offset {}", x.get_value()),
             Commands::ClearTrack => write!(f, "Clear Track"),
             Commands::ClearMemory => write!(f, "Clear Memory"),
             Commands::ClearAll => write!(f, "Clear All"),
@@ -601,6 +605,7 @@ impl Commands {
                 let x = DataSource::from_u8_vec(data[1..3].to_vec());
                 match cmd {
                     Commands::LoopSet(_) => Commands::LoopSet(x),
+                    Commands::Jump(_) => Commands::Jump(Int16::from_u8_vec(data[1..3].to_vec())),
                     _ => Commands::None,
                 }
             }
@@ -637,7 +642,7 @@ impl Commands {
             }
             Commands::LoopSet(x) => format!("Loop ({} times)", x.formatted_value()),
             Commands::LoopEnd => "End the current loop".to_string(),
-            Commands::Jump(_) => "Jump to specified command".to_string(),
+            Commands::Jump(x) => format!("Jump to byte offset {}", x.get_value()),
             Commands::ClearTrack => "Clear the current track".to_string(),
             Commands::ClearMemory => "Clear the memory".to_string(),
             Commands::ClearAll => "Clear all tracks and memory".to_string(),
