@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 use core::fmt;
-use std::default;
-
 use log::{debug, info};
 
 #[cfg(feature = "iter")]
@@ -723,7 +721,8 @@ impl NSLScript {
         }
     }
 
-    /// Validates the command list by checking for conditional and loop levels
+    /// Validates the command list by checking for conditional and loop levels,
+    /// and that every Jump target lands on a command start offset
     pub fn validate(&self) -> bool {
         let mut if_level = 0;
         let mut loop_level = 0;
@@ -731,7 +730,12 @@ impl NSLScript {
             Some(f) => *f == Commands::End,
             None => false,
         };
+        let mut starts: Vec<usize> = Vec::new();
+        let mut jumps: Vec<usize> = Vec::new();
+        let mut offset: usize = 0;
+
         for cmd in self.commands.iter() {
+            starts.push(offset);
             match cmd {
                 Commands::CondE(_, _)
                 | Commands::CondNE(_, _)
@@ -750,10 +754,18 @@ impl NSLScript {
                 Commands::CondEnd => {
                     if_level -= 1;
                 }
+                Commands::Jump(target) => {
+                    jumps.push(target.get_value() as usize);
+                }
                 _ => {}
             }
+            offset += cmd.len();
         }
-        (if_level == 0) && (loop_level == 0) && finish_end
+
+        // Validate jump commands
+        let jumps_ok = jumps.iter().all(|t| *t < offset && starts.contains(t));
+
+        (if_level == 0) && (loop_level == 0) && finish_end && jumps_ok
     }
 
     // Add a command to the script
