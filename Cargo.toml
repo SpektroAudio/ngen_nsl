@@ -3,7 +3,6 @@ name = "ngen_nsl"
 version = "0.1.1"
 edition = "2021"
 authors = ["Spektro Audio <contact@spektroaudio.com>"]
-homepage = "https://github.com/spektroaudio/ngen_nsl"
 repository = "https://github.com/spektroaudio/ngen_nsl"
 readme = "README.md"
 categories = ["multimedia", "multimedia::encoding"]
