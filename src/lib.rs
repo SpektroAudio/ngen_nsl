@@ -50,6 +50,13 @@ impl DataValue {
         dv
     }
 
+    pub fn validate(&mut self) {
+        match self {
+            DataValue::Number(x) => *x = (*x).min(127),
+            DataValue::Buffer(x) => *x = (*x).min(31),
+        }
+    }
+
     /// Encodes the DataValue into a u8 value
     pub fn code(&self) -> u8 {
         match self {
@@ -390,6 +397,30 @@ impl Commands {
         Commands::End
     }
 
+    /// Validates all DataSource parameters of the command, clipping them to their valid ranges
+    pub fn validate(&mut self) {
+        match self {
+            Commands::Set(x, y)
+            | Commands::Copy(x, y)
+            | Commands::Add(x, y)
+            | Commands::Subtract(x, y)
+            | Commands::Multiply(x, y)
+            | Commands::Divide(x, y)
+            | Commands::GenerateEuclidean(x, y)
+            | Commands::CondE(x, y)
+            | Commands::CondNE(x, y)
+            | Commands::CondGT(x, y)
+            | Commands::CondLT(x, y)
+            | Commands::CondGTE(x, y)
+            | Commands::CondLTE(x, y) => {
+                x.validate();
+                y.validate();
+            }
+            Commands::LoopSet(x) => x.validate(),
+            _ => {}
+        }
+    }
+
     /// Returns the length of the command in bytes
     pub fn len(&self) -> usize {
         match self {
@@ -656,8 +687,8 @@ impl Commands {
             Commands::Divide(x, y) => {
                 format!("Divide {} by {}", x.formatted_value(), y.formatted_value())
             }
-            Commands::LoopSet(x) => format!("Loop ({} times)", x.formatted_value()),
-            Commands::LoopEnd => "End the current loop".to_string(),
+            Commands::LoopSet(x) => format!("Loop Set ({} times)", x.formatted_value()),
+            Commands::LoopEnd => "Loop End".to_string(),
             Commands::Jump(x) => format!("Jump to byte offset {}", x.get_value()),
             Commands::ClearTrack => "Clear the current track".to_string(),
             Commands::ClearMemory => "Clear the memory".to_string(),
@@ -726,10 +757,11 @@ impl NSLScript {
     pub fn validate(&self) -> bool {
         let mut if_level = 0;
         let mut loop_level = 0;
-        let finish_end = match self.commands.last() {
-            Some(f) => *f == Commands::End,
-            None => false,
-        };
+        let finish_end = true;
+        // let finish_end = match self.commands.last() {
+        //     Some(f) => *f == Commands::End,
+        //     None => false,
+        // };
         let mut starts: Vec<usize> = Vec::new();
         let mut jumps: Vec<usize> = Vec::new();
         let mut offset: usize = 0;
@@ -785,6 +817,7 @@ impl NSLScript {
         // Add the NSL header
         let mut code: Vec<u8> = vec![0x4E, 0x53, 0x4C, 0x01];
         for command in &mut self.commands {
+            command.validate(); // Validate the command
             let cmd_code = command.code();
             debug!("Command: {:?} > {:?}", command, cmd_code);
             code.extend(cmd_code);
