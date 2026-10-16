@@ -11,7 +11,7 @@ fn main() {
 
     println!("Commands added to the script: {}", script.commands.len());
 
-    let code = script.code();
+    let code = script.code().unwrap();
     println!("Converted script: {:?}", code);
 
 

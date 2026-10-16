@@ -25,6 +25,56 @@ fn clip_u8(value: u8, min: u8, max: u8) -> u8 {
     }
 }
 
+/// Clip a byte offset into the program address range (u16, as used by the engine)
+fn clip_pos(pos: usize) -> u16 {
+    if pos > 0xFFFF {
+        0xFFFF
+    } else {
+        pos as u16
+    }
+}
+
+/* Engine limits, mirroring SA_GEN_NSL.h */
+const NSL_SCRIPT_VERSION: u8 = 0x01;
+const NSL_MAX_LOOP_DEPTH: usize = 4; // nested LOOP_SET / LOOP_END frames
+const NSL_MAX_COND_DEPTH: usize = 4; // nested condition frames
+const NSL_PROGRAM_LIMIT: usize = 65535; // max program size in bytes
+
+/// Error kinds reported by the engine (mirrors `NSL_ERROR` in `SA_GEN_NSL.h`)
+#[derive(Debug, Clone, PartialEq)]
+pub enum NslErrorKind {
+    /// No error (`NSL_ERR_NONE`)
+    None,
+    /// Instruction limit reached during generation (`NSL_ERR_WATCHDOG`)
+    Watchdog,
+    /// JUMP target out of range (`NSL_ERR_BAD_JUMP`)
+    BadJump,
+    /// Command or operand combination rejected by `validate()`
+    InvalidProgram,
+    /// Nesting deeper than `NSL_MAX_LOOP_DEPTH` (`NSL_ERR_LOOP_OVERFLOW`)
+    LoopOverflow,
+    /// Nesting deeper than `NSL_MAX_COND_DEPTH` (`NSL_ERR_COND_OVERFLOW`)
+    CondOverflow,
+}
+
+/// Error payload: the kind plus the byte offset of the offending command
+/// (relative to the start of the program, after the header)
+#[derive(Debug, Clone, PartialEq)]
+pub struct NslError {
+    pub kind: NslErrorKind,
+    pub pos: u16,
+}
+
+impl NslError {
+    /// Builds an error at a given program offset
+    pub fn at(kind: NslErrorKind, pos: usize) -> NslError {
+        NslError {
+            kind,
+            pos: clip_pos(pos),
+        }
+    }
+}
+
 #[cfg_attr(feature = "iter", derive(EnumIter))]
 /// DataValue is a value that can be either a direct number or a index to a value in the Memory Buffer
 #[derive(Debug, Clone, PartialEq)]
@@ -93,7 +143,7 @@ impl DataValue {
 pub enum DataSource {
     /// A constant value (0 - 127)
     Constant(DataValue),
-    /// A random value (0 - 127)
+    /// A random value in the range 0 to `value - 1` (upper bound is exclusive)
     Random(DataValue),
     /// A step value from the pitch sequence (0 - 31)
     StepPitch(DataValue),
@@ -147,6 +197,7 @@ impl DataSource {
             DataSource::StepLength(_) => true,
             DataSource::StepDensity(_) => true,
             DataSource::MemoryBuffer(_) => true,
+            DataSource::Params(_) => true,
             _ => false,
         }
     }
@@ -216,6 +267,25 @@ impl DataSource {
             DataSource::Scale(_) => 127,
             DataSource::FullScale(_) => 127,
             DataSource::RandomNote(_) => 100,
+        }
+    }
+
+    /// Returns the maximum value for each DataSource type.
+    /// Returns 0 for types that cannot be written to (see `is_destination`).
+    ///
+    /// These ranges come from `setValue()` in the engine: Pitch / Velocity are
+    /// MIDI values, Length is limited by `input < 8` (0 - 7 beats), Density by
+    /// `input < 50` (0 - 49), Params by `input < 100` (0 - 99) and the Memory
+    /// Buffer accepts any byte (0 - 255).
+    pub fn dest_max(&self) -> u8 {
+        match self {
+            DataSource::StepPitch(_) => 127,
+            DataSource::StepVelocity(_) => 127,
+            DataSource::StepLength(_) => 7,
+            DataSource::StepDensity(_) => 49,
+            DataSource::MemoryBuffer(_) => 255,
+            DataSource::Params(_) => 99,
+            _ => 0,
         }
     }
 
@@ -752,18 +822,13 @@ impl NSLScript {
         }
     }
 
-    /// Validates the command list by checking for conditional and loop levels,
-    /// and that every Jump target lands on a command start offset
-    pub fn validate(&self) -> bool {
-        let mut if_level = 0;
-        let mut loop_level = 0;
-        let finish_end = true;
-        // let finish_end = match self.commands.last() {
-        //     Some(f) => *f == Commands::End,
-        //     None => false,
-        // };
+    /// Validates the command list against the engine's structural limits,
+    /// returning the first error found with its program offset
+    pub fn validate(&self) -> Result<(), NslError> {
+        let mut if_level = 0i8;
+        let mut loop_level = 0i8;
         let mut starts: Vec<usize> = Vec::new();
-        let mut jumps: Vec<usize> = Vec::new();
+        let mut jumps: Vec<(usize, usize)> = Vec::new(); // (command offset, target)
         let mut offset: usize = 0;
 
         for cmd in self.commands.iter() {
@@ -775,29 +840,64 @@ impl NSLScript {
                 | Commands::CondLT(_, _)
                 | Commands::CondGTE(_, _)
                 | Commands::CondLTE(_, _) => {
+                    // Top-level is not counted, only nesting counts against the max
+                    if if_level > 0 && if_level - 1 >= NSL_MAX_COND_DEPTH as i8 {
+                        return Err(NslError::at(NslErrorKind::CondOverflow, offset));
+                    }
                     if_level += 1;
                 }
                 Commands::LoopSet(_) => {
                     loop_level += 1;
+                    if loop_level > NSL_MAX_LOOP_DEPTH as i8 {
+                        return Err(NslError::at(NslErrorKind::LoopOverflow, offset));
+                    }
                 }
                 Commands::LoopEnd => {
                     loop_level -= 1;
+                    if loop_level < 0 {
+                        return Err(NslError::at(NslErrorKind::InvalidProgram, offset));
+                    }
                 }
                 Commands::CondEnd => {
                     if_level -= 1;
+                    if if_level < 0 {
+                        return Err(NslError::at(NslErrorKind::InvalidProgram, offset));
+                    }
                 }
                 Commands::Jump(target) => {
-                    jumps.push(target.get_value() as usize);
+                    jumps.push((offset, target.get_value() as usize));
+                }
+                // Destination operand must be a writable part
+                Commands::Set(x, _)
+                | Commands::Add(x, _)
+                | Commands::Subtract(x, _)
+                | Commands::Multiply(x, _)
+                | Commands::Divide(x, _) => {
+                    if !x.is_destination() {
+                        return Err(NslError::at(NslErrorKind::InvalidProgram, offset));
+                    }
                 }
                 _ => {}
             }
             offset += cmd.len();
         }
 
-        // Validate jump commands
-        let jumps_ok = jumps.iter().all(|t| *t < offset && starts.contains(t));
+        if offset > NSL_PROGRAM_LIMIT {
+            return Err(NslError::at(NslErrorKind::InvalidProgram, offset));
+        }
 
-        (if_level == 0) && (loop_level == 0) && finish_end && jumps_ok
+        // Validate jump commands
+        for (pos, target) in jumps {
+            if target >= offset || !starts.contains(&target) {
+                return Err(NslError::at(NslErrorKind::BadJump, pos));
+            }
+        }
+
+        if if_level != 0 || loop_level != 0 {
+            return Err(NslError::at(NslErrorKind::InvalidProgram, offset));
+        }
+
+        Ok(())
     }
 
     // Add a command to the script
@@ -813,9 +913,13 @@ impl NSLScript {
     }
 
     // Encode the script into a Vec<u8> value
-    pub fn code(&mut self) -> Vec<u8> {
+    pub fn code(&mut self) -> Result<Vec<u8>, NslError> {
+        // Validate structure first so a failing script is left untouched
+        if let Err(err) = self.validate() {
+            return Err(err);
+        }
         // Add the NSL header
-        let mut code: Vec<u8> = vec![0x4E, 0x53, 0x4C, 0x01];
+        let mut code: Vec<u8> = vec![0x4E, 0x53, 0x4C, NSL_SCRIPT_VERSION];
         for command in &mut self.commands {
             command.validate(); // Validate the command
             let cmd_code = command.code();
@@ -824,7 +928,7 @@ impl NSLScript {
 
             debug!("Code: {:?}", code);
         }
-        code
+        Ok(code)
     }
 
     pub fn from_u8_vec(data: Vec<u8>) -> Option<NSLScript> {
@@ -883,7 +987,10 @@ impl NSLScript {
 
     // Export the script as a hex file
     pub fn export_hex(&mut self, path: &str) -> Result<(), String> {
-        let code = self.code();
+        let code = match self.code() {
+            Ok(c) => c,
+            Err(e) => return Err(format!("Invalid script: {:?}", e)),
+        };
         std::fs::write(path, code).map_err(|f| f.to_string())
     }
 }
@@ -904,7 +1011,7 @@ mod tests {
             0x00, 0x00, 0x01, 0xC1,
         ];
         let mut script = NSLScript::from_u8_vec(test_script.clone()).unwrap();
-        let code = script.code();
+        let code = script.code().unwrap();
 
         assert_eq!(
             test_script,
